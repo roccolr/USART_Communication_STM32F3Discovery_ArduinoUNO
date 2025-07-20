@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 PORT = 'COM6'
 BAUDRATE = 9600
 MP3_PATH = "C:\\Users\\rocco\\Desktop\\USART_Communication_STM32F3Discovery_ArduinoUNO\\master_slave_python\\nature_sounds.mp3"
-NUM_SAMPLES = 256
+NUM_SAMPLES = 128
 AudioSegment.converter = "C:\\Users\\rocco\\Documents\\ffmpeg\\ffmpeg-7.1.1-full_build\\bin\\ffmpeg.exe"
 
 
@@ -23,9 +23,9 @@ if(__name__ == '__main__'):
     print(f'[MAIN]\tDurata: {duration_sec}\tsample_rate: {sample_rate}\tnumero_campioni: {total_samples}')
 
     # calcolo campioni da ottenere
-    # n_finestre_temporali = 210, n_elementi_finestra = 256
-    # totale_campioni = 210*256 = 53760 codificati come uint8_t
-    new_frame_rate = int(53760/duration_sec)
+    # n_finestre_temporali = 105, n_elementi_finestra = 128
+    # totale_campioni = 105*128 = 13440 codificati come uint8_t
+    new_frame_rate = int(13440/duration_sec)
     print(f'[MAIN]\tnuova frequenza di campionamento: {new_frame_rate}')
     audio = AudioSegment.from_mp3(MP3_PATH)
     audio = audio.set_channels(1).set_frame_rate(new_frame_rate)
@@ -33,14 +33,14 @@ if(__name__ == '__main__'):
     print(f'[MAIN]\tcampioni ottenuti: {len(samples)}, tipo: {samples.dtype}')
 
     # creazione struttura dati 
-    n_windows = 210
-    data_structure = np.zeros((210,256), np.int16)
-    fourier = np.zeros((210,256), np.uint8)
+    n_windows = 105
+    data_structure = np.zeros((105,128), np.int16)
+    fourier = np.zeros((105,128), np.uint8)
 
     # fill struttura dati 
     k = 0
-    for i in range(0,210):
-        for j in range(0,256):
+    for i in range(0,105):
+        for j in range(0,128):
             try:
                 data_structure[i,j] = samples[k]
                 k+=1
@@ -50,6 +50,7 @@ if(__name__ == '__main__'):
     print(f'[MAIN]\tstruttura dati popolata')
     max = np.int32(data_structure.max())
     min = np.int32(data_structure.min())
+    info = np.int64(max or min<<32)
     print(f'[MAIN]\tmax={max}, min={min}, codificati su 32 bit con segno')
 
     # normalizzazione
@@ -59,34 +60,35 @@ if(__name__ == '__main__'):
 
     # inizio business logic 
     ser = serial.Serial(PORT, BAUDRATE, timeout=10)
-    time.sleep(3)
+    # time.sleep(3)
 
     #invio massimo e minimo, in totale 8 byte 
-    print('[MAIN]\tinvio metadati')
-    ser.write(max.tobytes())    # invia 4 byte
-    time.sleep(0.5)             
-    ser.write(min.tobytes())    # invia 4 byte
-    time.sleep(0.5)             
+    print('[MAIN]\tinvio metadati...')
+    ser.write(info.tobytes())    # invia 4 byte
+    print('[MAIN]\tinviati metadati...')
 
-
+    # time.sleep(2)
     # invio dati vero e proprio 
-    for i in range(0,210):
-        print(f'[MAIN]\tinvio finestra {i}')
-        ser.write(data_structure[i].tobytes())
-    
+    for i in range(0,105):
+        print(f'[MAIN]\tinvio finestra {i}...')
+        for j in range(0,128):
+            ser.write(data_structure[i,j].tobytes())
+        # time.sleep(0.1)
     print('[MAIN]\tdati inviati')
 
     # ricezione stft
-    for i in range(0,210):
-        print(f'[MAIN]\tricezione finestra {i}')
-        fourier[i] = ser.read(256)
+    for i in range(0,105):
+        print(f'[MAIN]\tricezione finestra {i}...')
+        raw = ser.read(128)
+        fourier[i] = np.frombuffer(raw, np.uint8)
     print('[MAIN]\tdati ricevuti')
 
     ser.close()
 
     spect = sp.enhance_spectrogram(fourier)
+    print(fourier)
 
     plt.figure()
-    plt.imshow(spect, cmap='jet', clim=[0,255])
+    plt.imshow(spect, cmap='gray', clim=[0,255])
     plt.show()
     

@@ -31,9 +31,10 @@
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
-uint8_t rx_buffer[256];
+uint8_t rx_buffer[128*105];
 uint16_t rx_index = 0;
 uint8_t rx_complete = 0;
+uint8_t metadati_completi = 0;
 /* USER CODE END PV */
 
 /** @addtogroup STM32_USB_OTG_DEVICE_LIBRARY
@@ -64,7 +65,8 @@ uint8_t rx_complete = 0;
   */
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
-#define RX_TARGET_LEN 256
+#define RX_TARGET_LEN 128*105
+#define META_TARGET_LEN 8
 /* USER CODE END PRIVATE_DEFINES */
 
 /**
@@ -261,18 +263,33 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-  if (!rx_complete) {
-	if (rx_index + *Len <= RX_TARGET_LEN) {
-	  memcpy(&rx_buffer[rx_index], Buf, *Len);
-	  rx_index += *Len;
 
-	  if (rx_index >= RX_TARGET_LEN) {
-		rx_complete = 1;  // Segnala che la ricezione è completa
-		rx_index = 0;     // Resetta l'indice (facoltativo)
-	  }
+
+	// prima fase metadati_completi == 0
+	if(metadati_completi == 0){
+		if(rx_index + *Len <= META_TARGET_LEN){
+			memcpy(&rx_buffer[rx_index], Buf, *Len);
+			rx_index+= *Len;
+			if(rx_index == META_TARGET_LEN){
+				metadati_completi = 1;
+				rx_index = 0;
+			}
+		}
+	}
+	if (!rx_complete && metadati_completi==1) {
+		if (rx_index + *Len <= RX_TARGET_LEN) {
+		  memcpy(&rx_buffer[rx_index], Buf, *Len);
+		  rx_index += *Len;
+
+		  if (rx_index >= RX_TARGET_LEN) {
+			rx_complete = 1;  // Segnala che la ricezione è completa
+			rx_index = 0;     // Resetta l'indice (facoltativo)
+		  }
+		}
 	}
 	USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-  }
+	return (USBD_OK);
+
   /* USER CODE END 6 */
 }
 

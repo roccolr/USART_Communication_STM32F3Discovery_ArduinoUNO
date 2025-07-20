@@ -47,8 +47,9 @@ I2C_HandleTypeDef hi2c1;
 SPI_HandleTypeDef hspi1;
 
 /* USER CODE BEGIN PV */
-extern uint8_t rx_buffer[256];
+extern uint8_t rx_buffer[128*105];
 extern volatile uint8_t rx_complete;
+extern volatile uint8_t metadati_completi;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -99,41 +100,64 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-  Complesso x[256];
-  Complesso X[256];
-  uint8_t indici[256];
-  float magnitude[256];
+//  Complesso x[256][210];
+//  uint8_t data[210][256];
+//  Complesso X[256];
+//  uint8_t metadati[8];
+  uint8_t indici[128];
+//  float magnitude[256];
+  int32_t massimo = 0;
+  int32_t minimo = 0;
 
-  while(rx_complete == 0){
+  // led rosso che lampeggia -> Microcontrollore sta ricevendo i metdati
+  while(metadati_completi == 0){
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+	  HAL_Delay(100);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+	  HAL_Delay(100);
+  }
+
+  // ottenimento informazioni massimo e minimo
+  massimo = (int32_t)(rx_buffer[0] | rx_buffer[1]<<8 | rx_buffer[2]<<16 | rx_buffer[3]<<24);
+  minimo = (int32_t)(rx_buffer[4] | rx_buffer[5]<<8 | rx_buffer[6]<<16 | rx_buffer[7]<<24);
+  // led rosso fisso -> ricezione metadati avvenuta
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
+
+
+
+  // led blu che lampeggia -> Microcontrollore sta ricevendo i dati
+	while(rx_complete == 0){
 	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
 	  HAL_Delay(100);
 	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 	  HAL_Delay(100);
-  }
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
-  HAL_Delay(1000);
+	}
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
+	HAL_Delay(1000);
 
-  for(int i=0; i<256; i++){
-	  x[i].re = (float)((rx_buffer[i]/127.5f) - 1.0f)*47.0f;
-	  x[i].im = 0;
-  }
+//	int k=0;
+//	for(int i=0; i<210; i++){
+//		for(int j=0; j<256; j++){
+//			data[i][j] = rx_buffer[k]
+//		}
+//	}
 
-  arm_fft(x,X,256);
-  fft_to_spectrogram(x,magnitude, 256, -80.0f);
+	for(int j=0; j<105; j++){
+		Complesso x[128];
+		Complesso X[128];
+		float magnitude[128];
+		for(int i=0; i<128; i++){
+			x[i].re = (float)(((rx_buffer[j*128+i]/255.0f) * (massimo-minimo)) + minimo);
+			x[i].im = 0;
+		}
+		arm_fft(x,X,128);
+		fft_to_spectrogram(X,magnitude, 128, -65.0f);
+		for(int l=0; l<128; l++){
+		  indici[l] = (uint8_t)(magnitude[l]*255);
+		}
+		CDC_Transmit_FS(indici, 128);
+	}
 
-  for(int i=0; i<256; i++){
-	  indici[i] = (uint8_t)(magnitude[i]*255);
-  }
-
-  CDC_Transmit_FS(indici, 256);
-
-
-  //accende il led se ha finito la ricezione
-
-
-
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
-  HAL_Delay(1000);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -143,8 +167,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_SET);
 	  HAL_Delay(1000);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
 	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 	  HAL_Delay(1000);
   }
@@ -314,6 +340,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_4, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
+
   /*Configure GPIO pins : DRDY_Pin MEMS_INT3_Pin MEMS_INT4_Pin MEMS_INT1_Pin
                            MEMS_INT2_Pin */
   GPIO_InitStruct.Pin = DRDY_Pin|MEMS_INT3_Pin|MEMS_INT4_Pin|MEMS_INT1_Pin
@@ -345,6 +374,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
