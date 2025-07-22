@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 
 PORT = 'COM6'
 BAUDRATE = 9600
-MP3_PATH = "C:\\Users\\rocco\\Desktop\\USART_Communication_STM32F3Discovery_ArduinoUNO\\master_slave_python\\nature_sounds.mp3"
+MP3_PATH = "mp3 path here"
 NUM_SAMPLES = 128
-AudioSegment.converter = "C:\\Users\\rocco\\Documents\\ffmpeg\\ffmpeg-7.1.1-full_build\\bin\\ffmpeg.exe"
+AudioSegment.converter = "yout path to \\ffmpeg.exe"
 
 
 if(__name__ == '__main__'):
