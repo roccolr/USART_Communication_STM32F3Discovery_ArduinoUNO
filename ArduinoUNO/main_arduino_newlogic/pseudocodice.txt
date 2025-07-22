@@ -1,0 +1,12 @@
+main(){
+	invia_segnale(); 						// 105 finestre da 128 campioni
+	abilita_invio_periferica_A(); 
+	for(int i=0; i<N_FINESTRE;i++){
+		ricevi_trasformata_finestra();
+		disabilita_invio_periferica_A();
+		abilita_invio_periferica_B();
+		sleep();							// sleep per simulare lavoro
+		disabilita_invio_periferica_B();
+		abilita_invio_periferica_A();
+	}
+}
