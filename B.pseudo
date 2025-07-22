@@ -1,0 +1,30 @@
+main(){
+	ricezione_bloccante_metadati_DMA() 
+	ricezione_bloccante_dati_DMA()
+	
+	for finestra in segnale:
+		fft_normalizzata(finestra, buffer_destinazione=&buff[N_CAMPIONI*finestra])
+		finestra_calcolata++
+
+		if (fine_trasmissione == 1) {
+			REQ = Alto
+			fine_trasmissione = 0;
+		}
+	fine = 1;
+	loop()
+}
+
+ISR_ACK(){
+	REQ = Basso
+	finestra_odierna++
+	DMA_Trasmetti(finestra_odierna - 1)
+}
+
+ISR_DMA_Fine_trasmissione(){
+	fine_trasmissione = 1;
+	if(fine == 1){
+		if(finestra_odierna< finestra_calcolata){
+			REQ = alto;
+		}
+	}
+}

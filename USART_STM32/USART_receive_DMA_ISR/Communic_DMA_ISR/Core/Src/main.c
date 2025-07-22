@@ -34,6 +34,15 @@
 /* USER CODE BEGIN PD */
 #define N_FINESTRE 105
 #define N_CAMPIONI 128
+#define LED_1 GPIO_PIN_9
+#define LED_2 GPIO_PIN_8
+#define LED_3 GPIO_PIN_15
+#define LED_4 GPIO_PIN_14
+#define LED_5 GPIO_PIN_13
+#define EMB_LEDS GPIOE
+#define COM_PINS GPIOB
+#define REQ GPIO_PIN_0
+#define ACK GPIO_PIN_1
 
 /* USER CODE END PD */
 
@@ -72,8 +81,9 @@ static void MX_UART4_Init(void);
   volatile uint8_t trasmissione_completata = 1;
   volatile uint8_t metadati_ricevuti = 0;
   volatile uint8_t dati_ricevuti = 0;
-
-
+  volatile uint8_t fine = 0;
+  volatile uint8_t finestra_corrente = 0;
+  volatile uint8_t finestra_calcolata = 0;
 /* USER CODE END 0 */
 
 /**
@@ -109,40 +119,32 @@ int main(void)
   MX_UART4_Init();
   /* USER CODE BEGIN 2 */
 
-  /*
-   * FASE 0 - RICEZIONE METADATI
-   */
+  // LEGENDA PIN:
+  // GPIOC10 -> UART TX
+  // GPIOC11 -> UART RX
+  // GPIOB0  -> REQ
+  // GPIOB1  -> ACK  -> scatena interrupt
+  // GPIOE9  -> LED 1 Rosso
+  // GPIOE8  -> LED 2 Blue
+  // GPIOE15 -> LED 3 Green
+  // GPIOE14 -> Led 4 Orange
+  // GPIOE13 -> Led 5 Red
+
+
   HAL_UART_Receive_DMA(&huart4, metadata, 8);
   while(metadati_ricevuti == 0){
-
   }
-
-
-  // LED BLU -> METADATI RICEVUTI!
-
-  /*
-   * PRIMA FASE - RICEZIONE DI TUTTA LA PORZIONE DI SEGNALE QUANTIZZATA DESTINATA AL NODO
-   * La ricezione avviene mediante DMA e USART
-   */
   HAL_UART_Receive_DMA(&huart4, signal, N_FINESTRE*N_CAMPIONI);
   while(dati_ricevuti == 0){
-
   }
-  //LED ARANCIONE -> Dati ricevuti
 
-//  //calcolo massimo e minimo
+  // calcolo massimo e minimo
   massimo = (int32_t)(metadata[0] | metadata[1]<<8 | metadata[2]<<16 | metadata[3]<<24);
   minimo = (int32_t)(metadata[4] | metadata[5]<<8 | metadata[6]<<16 | metadata[7]<<24);
 
-  /*
-   * FASE 2: Ad ogni elaborazione, iniziamo un handshake con il master e invieremo il dato
-   *
-   */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // alziamo ACK la prima volta
-
 
   for(int i=0; i<N_FINESTRE; i++){
-	  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, GPIO_PIN_SET); //inizio elaborazione
+	  HAL_GPIO_WritePin(EMB_LEDS, LED_3, GPIO_PIN_SET); //inizio elaborazione finestra i-esima
 
 
 	  // CALCOLI FFT
@@ -156,23 +158,17 @@ int main(void)
 	  arm_fft(x,X,N_CAMPIONI);
 	  fft_to_spectrogram(X, magnitude, N_CAMPIONI, -65.0f);	// [0,1]
 	  for(int l=0; l<N_CAMPIONI; l++){
-		  indici[l] = (uint8_t)(magnitude[l]*255);
+		  signal[i*N_CAMPIONI+l] = (uint8_t)(magnitude[l]*255);
 	  }
-
-
-	  // HANDSHAKE
-	  while((HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_1) == GPIO_PIN_RESET) || (trasmissione_completata==0)){
-
+	  finestra_calcolata++;
+	  if(trasmissione_completata == 1){
+		  HAL_GPIO_WritePin(COM_PINS, REQ, GPIO_PIN_SET); // alzo la richiesta
+		  trasmissione_completata = 0;
 	  }
-	  trasmissione_completata = 0;
-
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET); // ACK
-	  HAL_UART_Transmit_DMA(&huart4, indici, N_CAMPIONI);
-//	  HAL_UART_Transmit(&huart4, indici, N_CAMPIONI, HAL_MAX_DELAY);
-	  HAL_Delay(1);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
-	  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_11, GPIO_PIN_RESET); // fine elaborazione
+	  HAL_GPIO_WritePin(EMB_LEDS, LED_3, GPIO_PIN_RESET); //fine elaborazione finestra i-esima
+//	  HAL_Delay(1000);
   }
+  fine = 1;
 
 //   DATA READY CAUSA SUL MASTER UN'INTERRUZIONE CHE TRIGGERA IL SEGNALE ACK E FA IN MODO CHE LA COMUNICAZIONE SIA
 //   SINCRONA E ORDINATA
@@ -186,9 +182,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_14, GPIO_PIN_SET);
+	  HAL_GPIO_WritePin(EMB_LEDS, LED_5, GPIO_PIN_SET);
 	  HAL_Delay(100);
-	  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_14, GPIO_PIN_RESET);
+	  HAL_GPIO_WritePin(EMB_LEDS, LED_5, GPIO_PIN_RESET);
 	  HAL_Delay(100);
   }
   /* USER CODE END 3 */
@@ -347,8 +343,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, CS_I2C_SPI_Pin|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
-                          |GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, CS_I2C_SPI_Pin|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_13
+                          |GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_RESET);
@@ -356,16 +352,16 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : DRDY_Pin MEMS_INT4_Pin MEMS_INT1_Pin MEMS_INT2_Pin */
-  GPIO_InitStruct.Pin = DRDY_Pin|MEMS_INT4_Pin|MEMS_INT1_Pin|MEMS_INT2_Pin;
+  /*Configure GPIO pins : DRDY_Pin MEMS_INT4_Pin MEMS_INT1_Pin */
+  GPIO_InitStruct.Pin = DRDY_Pin|MEMS_INT4_Pin|MEMS_INT1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_EVT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : CS_I2C_SPI_Pin PE10 PE11 PE12
-                           PE14 */
-  GPIO_InitStruct.Pin = CS_I2C_SPI_Pin|GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12
-                          |GPIO_PIN_14;
+  /*Configure GPIO pins : CS_I2C_SPI_Pin PE8 PE9 PE13
+                           PE14 PE15 */
+  GPIO_InitStruct.Pin = CS_I2C_SPI_Pin|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_13
+                          |GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -385,12 +381,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PC4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
   /*Configure GPIO pin : PB0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -400,7 +390,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : PB1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
@@ -419,6 +409,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
@@ -428,25 +422,45 @@ static void MX_GPIO_Init(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	if(metadati_ricevuti == 0){
 		metadati_ricevuti = 1;
-		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_12, GPIO_PIN_SET);
-//		HAL_UART_Receive_DMA(huart, signal, N_FINESTRE*N_CAMPIONI);
+		HAL_GPIO_WritePin(EMB_LEDS, LED_1, GPIO_PIN_SET);
 	}
 	else{
 		dati_ricevuti = 1;
-		HAL_GPIO_WritePin(GPIOE, GPIO_PIN_10, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(EMB_LEDS, LED_2, GPIO_PIN_SET);
 	    if (HAL_UART_DeInit(huart) != HAL_OK) {
-	        Error_Handler(); // Handle de-initialization error
+	        Error_Handler();
 	    }
 	    if (HAL_UART_Init(huart) != HAL_OK) {
-	        Error_Handler(); // Handle re-initialization error
-	    }
+	        Error_Handler(); 	    }
 	}
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
+//	if(finestra_corrente < finestra_calcolata){
+//		HAL_GPIO_WritePin(COM_PINS, REQ, GPIO_PIN_SET);
+//		stop = 1;
+//		HAL_GPIO_TogglePin(EMB_LEDS, LED_4);
+//	}else{
+//		stop = 0;
+//	}
 	trasmissione_completata = 1;
+	if(fine == 1){
+		if(finestra_corrente<finestra_calcolata){
+			HAL_GPIO_WritePin(COM_PINS, REQ, GPIO_PIN_SET);
+		}
+	}
+}
 
-//	HAL_Delay(500);
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+//	if (GPIO_Pin == ACK){
+//		HAL_GPIO_WritePin(COM_PINS, REQ, GPIO_PIN_RESET);
+//		stop = 0;
+//		finestra_corrente++;
+//		HAL_UART_Transmit_DMA(&huart4, &signal[(finestra_corrente-1)*N_CAMPIONI], 128);
+//	}
+	HAL_GPIO_WritePin(COM_PINS, REQ, GPIO_PIN_RESET);
+	finestra_corrente++;
+	HAL_UART_Transmit_DMA(&huart4, &signal[(finestra_corrente-1)*N_CAMPIONI], 128);
 }
 /* USER CODE END 4 */
 
