@@ -10,8 +10,8 @@ Then it waits for the Transformed signal.
 #define     TWO_PI          6.28318530718
 #define     NUM_FIN         105
 #define     TRSM            13                      // lamp -> trasmissione in corso, high -> trasmissione avvenuta con successo
-#define     REQ             8
-#define     ACK             7
+#define     ACK             8
+#define     REQ             7
 
 void genera_sinusoide_quantizzata(float, float, int, uint8_t *);
 void toggle(int, float);
@@ -19,6 +19,7 @@ void toggle(int, float);
 int data_rec;
 int count = 0;
 uint8_t   indici[NUM_SAMPLES];
+int       ricevuti = 0;
 
 void setup() {
     genera_sinusoide_quantizzata(FREQ, FREQ_CAMP, NUM_SAMPLES, indici);
@@ -26,13 +27,13 @@ void setup() {
 
     //inizializzazione PIN
     pinMode(TRSM, OUTPUT);
-    pinMode(REQ,OUTPUT);
-    pinMode(ACK, INPUT);
-    digitalWrite(REQ,LOW);
+    pinMode(REQ,INPUT);
+    pinMode(ACK, OUTPUT);
+    digitalWrite(ACK,LOW);
     digitalWrite(TRSM, LOW);
 
     Serial.begin(115200);
-    Serial.setTimeout(1000);
+    Serial.setTimeout(10000);
 
     //inviamo massimo e minimo 
     int32_t massimo = 1;
@@ -45,8 +46,6 @@ void setup() {
         Serial.write((uint8_t)((minimo >> (8 * i)) & 0xFF));
     }
     // toggle(TRSM,1000);
-    
-    delay(100);
 
     //inviamo 105 finestre contenenti la stessa sinusoide
     digitalWrite(TRSM, HIGH);
@@ -61,21 +60,33 @@ void setup() {
     digitalWrite(TRSM,LOW);
 
     // aspetto i risultati dello spettrogramma 
-    for(int i=0; i<NUM_FIN; i++){
-        digitalWrite(REQ,HIGH);
-        while(digitalRead(ACK) == LOW){
 
-        }
-        data_rec=Serial.readBytes(indici, 128);
-        digitalWrite(REQ,LOW);
+    for(int i=0; i<NUM_FIN; i++){
+        while(digitalRead(REQ) == LOW){}
+        digitalWrite(ACK, HIGH);
+        
+        data_rec = Serial.readBytes(indici,128);
+        ricevuti+=128;
+        digitalWrite(ACK, LOW);
     }
 
+    // for(int i=0; i<NUM_FIN; i++){
+    //     digitalWrite(REQ,HIGH);
+    //     while(digitalRead(ACK) == LOW){
+
+    //     }
+    //     data_rec=Serial.readBytes(indici, 128);
+    //     digitalWrite(REQ,LOW);
+    // }
+    Serial.println("\n");
+    Serial.println("caratteri ricevuti = "+String(ricevuti));
 
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
     Serial.println(indici[count]);
+    
     toggle(TRSM,500);
     count++;
 }
